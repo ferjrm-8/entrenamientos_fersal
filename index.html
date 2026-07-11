@@ -614,7 +614,7 @@ function buildMirror(el){
   return mirror;
 }
 function swapFieldsForExport(){
-  const els = Array.from(document.querySelectorAll('#sheet input, #sheet textarea'));
+  const els = Array.from(document.querySelectorAll('#sheet input:not([type="file"]), #sheet textarea'));
   return els.map(el=>{
     const mirror = buildMirror(el);
     el.insertAdjacentElement('afterend', mirror);
