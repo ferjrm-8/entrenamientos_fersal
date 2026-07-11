@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FerSala — Planificador de Sesiones</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --ink:#152025;
+    --paper:#F3EFE6;
+    --pitch:#1D7A8C;
+    --line:#E7E1D2;
+    --band:#264653;
+    --band-2:#3A6B7A;
+    --action:#C4472B;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; font-family:'Barlow','Segoe UI',sans-serif; background:#DCD5C4; color:var(--ink); }
+  h1,h2,.display{ font-family:'Oswald','Barlow Condensed',sans-serif; letter-spacing:.02em; }
+
+  .toolbar{
+    position:sticky; top:0; z-index:50;
+    background:var(--band); color:#fff;
+    padding:10px 16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  }
+  .toolbar .title{ font-family:'Oswald',sans-serif; font-size:18px; font-weight:600; margin-right:8px; }
+  .btn{
+    appearance:none; border:1.5px solid rgba(255,255,255,.35);
+    background:transparent; color:#fff; padding:7px 12px; border-radius:3px;
+    font-family:'Barlow',sans-serif; font-weight:600; font-size:12.5px;
+    cursor:pointer; transition:.15s; white-space:nowrap;
+  }
+  .btn:hover{ background:rgba(255,255,255,.12); }
+  .btn.primary{ background:var(--action); border-color:var(--action); margin-left:auto; }
+  .btn.primary:hover{ background:#a83a22; }
+  .tool-group{ display:flex; gap:4px; background:rgba(0,0,0,.18); padding:4px; border-radius:5px; flex-wrap:wrap; }
+  .tool-btn{
+    border:none; background:transparent; color:#fff; padding:6px 10px;
+    font-size:12px; font-weight:600; border-radius:3px; cursor:pointer;
+    display:flex; align-items:center; gap:5px;
+  }
+  .tool-btn.active{ background:var(--action); }
+  .tool-btn:hover:not(.active){ background:rgba(255,255,255,.15); }
+  .palette{ display:flex; gap:6px; align-items:center; background:rgba(0,0,0,.18); padding:5px 8px; border-radius:5px; }
+  .palette .swatch{ width:20px;height:20px;border-radius:50%; cursor:pointer; border:2px solid rgba(255,255,255,.5); }
+  .palette .swatch.active{ outline:2px solid #fff; outline-offset:2px; }
+  .hint-bar{ background:#EFE4C8; color:#5c4a1f; font-size:12px; padding:6px 16px; text-align:center; }
+
+  .stage{ padding:26px 14px 60px; display:flex; justify-content:center; }
+  .sheet{ width:794px; background:var(--paper); box-shadow:0 6px 24px rgba(0,0,0,.25); border:2px solid var(--ink); }
+
+  .head{ display:grid; grid-template-columns: 1fr 150px; border-bottom:2px solid var(--ink); }
+  .head-fields{ padding:10px 14px; }
+  .field-row{ display:flex; align-items:baseline; gap:6px; padding:4px 0; border-bottom:1px solid var(--line); font-size:13.5px; }
+  .field-row:last-child{ border-bottom:none; }
+  .field-row .lab{ font-weight:700; white-space:nowrap; }
+  .field-row input, .field-row textarea{ border:none; background:transparent; font-family:inherit; font-size:13.5px; color:var(--ink); flex:1; outline:none; padding:2px 4px; }
+  .field-row input:focus, .field-row textarea:focus{ background:#fff; border-radius:2px; }
+  .obj-row{ display:flex; gap:6px; padding:6px 0 2px; }
+  .obj-row .lab{ font-weight:700; font-size:13.5px; }
+  .obj-row textarea{ resize:none; height:34px; width:100%; }
+
+  .logo-box{ border-left:2px solid var(--ink); display:flex; align-items:center; justify-content:center; position:relative; background:#fff; cursor:pointer; }
+  .logo-box img{ max-width:88%; max-height:88%; object-fit:contain; }
+  .logo-box .placeholder{ font-size:11px; text-align:center; color:#999; padding:10px; }
+  .logo-box .logo-edit-tag{ position:absolute; bottom:4px; right:4px; font-size:9px; background:var(--band); color:#fff; padding:2px 5px; border-radius:2px; opacity:.85; }
+  input[type=file]{ display:none; }
+
+  .band{ background:var(--band); color:#fff; text-align:center; font-weight:700; letter-spacing:.08em; padding:8px; font-size:14px; font-family:'Oswald',sans-serif; }
+
+  .task{ display:grid; grid-template-columns: 1fr 320px; border-bottom:2px solid var(--ink); }
+  .task-left{ border-right:2px solid var(--ink); display:flex; flex-direction:column; }
+  .task-title-bar{ background:var(--band-2); color:#fff; padding:6px 10px; display:flex; align-items:center; justify-content:space-between; font-size:13px; font-weight:700; }
+  .task-title-bar input{ background:transparent; border:none; color:#fff; font-weight:700; font-family:'Oswald',sans-serif; font-size:13px; letter-spacing:.04em; outline:none; flex:1; text-transform:uppercase; }
+  .task-title-bar .dur{ display:flex; align-items:center; gap:4px; white-space:nowrap;}
+  .task-title-bar .dur input{ width:34px; text-align:center; font-weight:700; text-transform:none;}
+  .task-desc-label{ font-size:11px; font-weight:700; text-align:center; padding:5px 0 2px; color:#555; }
+  .task-desc{ flex:1; border:none; background:transparent; resize:none; font-family:'Barlow',sans-serif; font-size:14px; padding:4px 12px 12px; outline:none; min-height:120px; color:var(--ink); }
+  .task-desc:focus{ background:#fbf9f3; }
+  .task-actions{ display:flex; justify-content:flex-end; gap:6px; padding:4px 8px; }
+  .mini-btn{ border:1px solid #bbb; background:#fff; border-radius:3px; font-size:11px; padding:3px 7px; cursor:pointer; color:#555; }
+  .mini-btn:hover{ background:#f0f0f0; }
+
+  .court-wrap{ padding:8px; display:flex; flex-direction:column; align-items:center; gap:4px;}
+  .court-svg{ width:100%; aspect-ratio: 3/2; background:var(--pitch); border:4px solid var(--action); border-radius:3px; cursor:crosshair; touch-action:none; }
+  .court-tools{ display:flex; gap:6px; align-items:center; font-size:11px; color:#555; flex-wrap:wrap; justify-content:center;}
+
+  .add-task-row{ text-align:center; padding:16px; }
+  .footer-note{ font-size:10px; color:#8a8370; text-align:center; padding:8px; }
+
+  @media print{ .toolbar, .hint-bar{ display:none; } }
+  .exporting .toolbar, .exporting .hint-bar{ display:none; }
+  .exporting .stage{ padding:0; background:var(--paper); }
+  .exporting .sheet{ box-shadow:none; border:none; }
+  .exporting input, .exporting textarea{ background:transparent !important; }
+  .exporting .task-actions, .exporting .court-tools{ display:none; }
+  .exporting .logo-box .logo-edit-tag{ display:none; }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="title">⚽ FerSala</div>
+  <div class="tool-group" id="toolGroup">
+    <button class="tool-btn active" data-tool="player">● Jugador</button>
+    <button class="tool-btn" data-tool="pass">┄→ Pase</button>
+    <button class="tool-btn" data-tool="move">→ Desplaz.</button>
+    <button class="tool-btn" data-tool="dribble">〜 Conducción</button>
+    <button class="tool-btn" data-tool="goal">▯ Portería</button>
+    <button class="tool-btn" data-tool="zonesolid">─ Zona</button>
+    <button class="tool-btn" data-tool="zonedash">┄ Zona</button>
+    <button class="tool-btn" data-tool="select">✥ Mover/Corregir</button>
+  </div>
+  <div class="palette" id="palette">
+    <div class="swatch active" data-color="#3AA65A" style="background:#3AA65A" title="Equipo A"></div>
+    <div class="swatch" data-color="#C4472B" style="background:#C4472B" title="Equipo B"></div>
+    <div class="swatch" data-color="#ffffff" style="background:#ffffff" title="Porteros"></div>
+    <div class="swatch" data-color="#E6A93A" style="background:#E6A93A" title="Conos"></div>
+    <div class="swatch" data-color="#7B5EA7" style="background:#7B5EA7" title="Extra"></div>
+  </div>
+  <button class="btn" id="pasteBtn">📋 Pegar tareas</button>
+  <button class="btn" id="addTaskBtn">+ Tarea</button>
+  <button class="btn primary" id="exportBtn">⬇ Exportar PDF</button>
+</div>
+<div class="hint-bar" id="hintBar">
+  Modo Jugador: click para colocar · click derecho / doble click sobre un elemento para borrarlo
+</div>
+
+<div class="stage">
+  <div class="sheet" id="sheet">
+      <div class="head">
+        <div class="head-fields">
+          <div class="field-row">
+            <span class="lab">Sesión:</span>
+            <input id="f-sesion" placeholder="Ej. Captaciones 3" value="Captaciones 3">
+            <span class="lab">Fecha:</span>
+            <input id="f-fecha" style="max-width:110px" placeholder="dd/mm/aaaa" value="">
+            <span class="lab">Jugadores:</span>
+            <input id="f-jugadores" placeholder="nº / nombres">
+          </div>
+          <div class="obj-row">
+            <span class="lab">Objetivos:</span>
+            <textarea id="f-objetivos" placeholder="Objetivos de la sesión...">Conocer a los jugadores</textarea>
+          </div>
+        </div>
+        <div class="logo-box" id="logoBox">
+          <div class="placeholder" id="logoPlaceholder">Click para<br>subir escudo</div>
+          <img id="logoImg" style="display:none">
+          <div class="logo-edit-tag">cambiar</div>
+          <input type="file" id="logoInput" accept="image/*">
+        </div>
+      </div>
+
+      <div class="band">OBSERVACIONES</div>
+      <div style="padding:10px 14px;">
+        <textarea id="f-observaciones" style="width:100%;border:none;background:transparent;font-family:inherit;font-size:13.5px;min-height:46px;resize:vertical;outline:none;" placeholder="Observaciones generales de la sesión..."></textarea>
+      </div>
+
+      <div id="tasksContainer"></div>
+
+      <div class="add-task-row">
+        <button class="btn" style="color:var(--ink); border-color:var(--ink);" id="addTaskBtn2">+ Añadir tarea</button>
+      </div>
+      <div class="footer-note">FerSala — Planificador de sesiones</div>
+  </div>
+</div>
+
+<div id="pasteModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:100; align-items:center; justify-content:center;">
+  <div style="background:#fff; width:560px; max-width:92vw; border-radius:6px; padding:18px; font-family:'Barlow',sans-serif;">
+    <h2 style="margin:0 0 8px; font-size:17px; color:var(--ink);">Pegar tareas</h2>
+    <p style="font-size:12.5px; color:#666; margin:0 0 10px; line-height:1.5;">
+      Formato esperado, un bloque por tarea:
+      <br><code style="background:#f3f3f3; display:block; padding:8px; margin-top:6px; border-radius:4px; white-space:pre-wrap;">TAREA: Nombre de la tarea
+DURACIÓN: 10
+DESCRIPCIÓN:
+Texto de la descripción y variantes...
+
+TAREA: Siguiente tarea
+DURACIÓN: 10
+DESCRIPCIÓN:
+...</code>
+    </p>
+    <textarea id="pasteArea" style="width:100%; height:180px; font-family:monospace; font-size:12.5px; padding:8px;"></textarea>
+    <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+      <button class="mini-btn" id="pasteCancel">Cancelar</button>
+      <button class="btn primary" style="color:#fff;" id="pasteConfirm">Añadir tareas</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const COLORS = ["#3AA65A","#C4472B","#ffffff","#E6A93A","#7B5EA7"];
+let activeColor = COLORS[0];
+let activeTool = 'player';
+let taskCounter = 0;
+let tasks = [];
+
+const HINTS = {
+  player: 'Modo Jugador: click para colocar · click derecho / doble click sobre un elemento para borrarlo',
+  pass: 'Modo Pase: arrastra de un punto a otro para dibujar una flecha discontinua',
+  move: 'Modo Desplazamiento: arrastra para dibujar una flecha continua (jugador sin balón)',
+  dribble: 'Modo Conducción: arrastra para dibujar una flecha en zigzag (jugador con balón)',
+  goal: 'Modo Portería: arrastra para definir el ancho y la posición de una portería',
+  zonesolid: 'Modo Zona (línea continua): arrastra para delimitar una zona',
+  zonedash: 'Modo Zona (línea discontinua): arrastra para delimitar una zona',
+  select: 'Modo Mover/Corregir: arrastra un elemento existente para reposicionarlo. Click en vacío no crea nada.'
+};
+const LINE_TOOLS = ['pass','move','dribble','goal','zonesolid','zonedash'];
+
+document.querySelectorAll('.tool-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    activeTool = btn.dataset.tool;
+    document.getElementById('hintBar').textContent = HINTS[activeTool];
+  });
+});
+document.querySelectorAll('.palette .swatch').forEach(sw=>{
+  sw.addEventListener('click', ()=>{
+    document.querySelectorAll('.palette .swatch').forEach(s=>s.classList.remove('active'));
+    sw.classList.add('active');
+    activeColor = sw.dataset.color;
+  });
+});
+
+// ---------- Logo persistence ----------
+const logoBox = document.getElementById('logoBox');
+const logoInput = document.getElementById('logoInput');
+const logoImg = document.getElementById('logoImg');
+const logoPlaceholder = document.getElementById('logoPlaceholder');
+logoBox.addEventListener('click', ()=> logoInput.click());
+logoInput.addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async (ev)=>{
+    const dataUrl = ev.target.result;
+    setLogo(dataUrl);
+    try{ await window.storage.set('club-logo', dataUrl, false); }catch(err){ console.error('No se pudo guardar el logo', err); }
+  };
+  reader.readAsDataURL(file);
+});
+function setLogo(dataUrl){
+  logoImg.src = dataUrl; logoImg.style.display = 'block'; logoPlaceholder.style.display = 'none';
+}
+(async ()=>{
+  try{
+    const res = await window.storage.get('club-logo', false);
+    if(res && res.value) setLogo(res.value);
+  }catch(e){}
+})();
+
+// ---------- Task management ----------
+const tasksContainer = document.getElementById('tasksContainer');
+
+function createTask(data={}){
+  taskCounter++;
+  const id = 't' + taskCounter;
+  const task = { id, title: data.title || '', duration: data.duration || '', desc: data.desc || '', court: 'full', elements: [], history: [] };
+  tasks.push(task);
+  renderTask(task);
+  return task;
+}
+
+function pushHistory(task){
+  task.history.push(JSON.stringify(task.elements));
+  if(task.history.length > 40) task.history.shift();
+}
+function undo(task){
+  if(task.history.length === 0) return;
+  task.elements = JSON.parse(task.history.pop());
+  drawCourt(task);
+}
+
+function renderTask(task){
+  const el = document.createElement('div');
+  el.className = 'task';
+  el.id = 'task-' + task.id;
+  el.innerHTML = `
+    <div class="task-left">
+      <div class="task-title-bar">
+        <input class="title-input" placeholder="TAREA" value="${escapeAttr(task.title)}">
+        <div class="dur">Dur: <input class="dur-input" value="${escapeAttr(task.duration)}"> min</div>
+      </div>
+      <div class="task-desc-label">Descripción / Variantes</div>
+      <textarea class="task-desc">${escapeHtml(task.desc)}</textarea>
+      <div class="task-actions">
+        <button class="mini-btn dup-btn">Duplicar</button>
+        <button class="mini-btn del-btn">Eliminar</button>
+      </div>
+    </div>
+    <div class="court-wrap">
+      <svg class="court-svg" viewBox="0 0 300 200" data-id="${task.id}"></svg>
+      <div class="court-tools">
+        <button class="mini-btn undo-court">↺ Deshacer</button>
+        <button class="mini-btn clear-court">Vaciar pista</button>
+        <button class="mini-btn toggle-half">Medio campo</button>
+      </div>
+    </div>
+  `;
+  tasksContainer.appendChild(el);
+
+  el.querySelector('.title-input').addEventListener('input', e=> task.title = e.target.value);
+  el.querySelector('.dur-input').addEventListener('input', e=> task.duration = e.target.value);
+  el.querySelector('.task-desc').addEventListener('input', e=> task.desc = e.target.value);
+  el.querySelector('.del-btn').addEventListener('click', ()=>{
+    tasks = tasks.filter(t=>t.id!==task.id);
+    el.remove();
+  });
+  el.querySelector('.dup-btn').addEventListener('click', ()=>{
+    const copy = createTask({title: task.title+' (copia)', duration: task.duration, desc: task.desc});
+    copy.elements = task.elements.map(p=>({...p}));
+    copy.court = task.court;
+    drawCourt(copy);
+  });
+  el.querySelector('.undo-court').addEventListener('click', ()=> undo(task));
+  el.querySelector('.clear-court').addEventListener('click', ()=>{
+    pushHistory(task);
+    task.elements = [];
+    drawCourt(task);
+  });
+  el.querySelector('.toggle-half').addEventListener('click', (e)=>{
+    task.court = task.court === 'full' ? 'half' : 'full';
+    e.target.textContent = task.court === 'full' ? 'Medio campo' : 'Campo completo';
+    drawCourt(task);
+  });
+
+  drawCourt(task);
+  setupCourtInteraction(el.querySelector('.court-svg'), task);
+}
+
+function escapeHtml(s){ return (s||'').replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function escapeAttr(s){ return (s||'').replace(/"/g,'&quot;'); }
+
+// ---------- Court drawing ----------
+function courtMarkup(task){
+  const w=300,h=200;
+  let lines = '';
+  lines += `<rect x="4" y="4" width="${w-8}" height="${h-8}" fill="none" stroke="#eaf6f8" stroke-width="1.5" opacity="0.85"/>`;
+  lines += `<line x1="${w/2}" y1="4" x2="${w/2}" y2="${h-4}" stroke="#eaf6f8" stroke-width="1.5" opacity="0.85"/>`;
+  lines += `<circle cx="${w/2}" cy="${h/2}" r="24" fill="none" stroke="#eaf6f8" stroke-width="1.5" opacity="0.85"/>`;
+  lines += `<path d="M4,${h/2-38} A38,38 0 0,1 4,${h/2+38}" fill="none" stroke="#eaf6f8" stroke-width="1.5" opacity="0.85"/>`;
+  lines += `<path d="M${w-4},${h/2-38} A38,38 0 0,0 ${w-4},${h/2+38}" fill="none" stroke="#eaf6f8" stroke-width="1.5" opacity="0.85"/>`;
+  lines += `<rect x="0" y="${h/2-14}" width="6" height="28" fill="#1a1a1a" opacity="0.7"/>`;
+  lines += `<rect x="${w-6}" y="${h/2-14}" width="6" height="28" fill="#1a1a1a" opacity="0.7"/>`;
+  if(task.court === 'half'){
+    lines += `<rect x="4" y="4" width="${w/2-4}" height="${h-8}" fill="rgba(0,0,0,0.18)"/>`;
+  }
+  return lines;
+}
+
+function zigzagPath(x1,y1,x2,y2){
+  const dx = x2-x1, dy = y2-y1;
+  const dist = Math.sqrt(dx*dx+dy*dy);
+  const segs = Math.max(4, Math.round(dist/12));
+  const nx = -dy/dist, ny = dx/dist;
+  const amp = 4.5;
+  let d = `M${x1},${y1}`;
+  for(let i=1;i<segs;i++){
+    const t = i/segs;
+    const px = x1+dx*t, py = y1+dy*t;
+    const side = (i%2===0)?1:-1;
+    d += ` L${px+nx*amp*side},${py+ny*amp*side}`;
+  }
+  d += ` L${x2},${y2}`;
+  return d;
+}
+
+function arrowHead(x1,y1,x2,y2,color){
+  const angle = Math.atan2(y2-y1, x2-x1);
+  const size = 7;
+  const a1 = angle + Math.PI*0.82;
+  const a2 = angle - Math.PI*0.82;
+  const p1x = x2 + size*Math.cos(a1), p1y = y2 + size*Math.sin(a1);
+  const p2x = x2 + size*Math.cos(a2), p2y = y2 + size*Math.sin(a2);
+  return `<polygon points="${x2},${y2} ${p1x},${p1y} ${p2x},${p2y}" fill="${color}" stroke="#152025" stroke-width="0.6"/>`;
+}
+
+// Resolves rendering rules for each line-type element: path shape, dash pattern,
+// stroke width/color, and whether it gets an arrowhead.
+function lineStyle(type, x1,y1,x2,y2, color){
+  const style = { pathD: `M${x1},${y1} L${x2},${y2}`, dash:'', width:2.4, color, arrow:true, caps:false };
+  if(type === 'pass'){ style.dash = '5,5'; }
+  else if(type === 'move'){ /* solid, arrow */ }
+  else if(type === 'dribble'){ style.pathD = zigzagPath(x1,y1,x2,y2); }
+  else if(type === 'goal'){ style.width = 5; style.color = '#1a1a1a'; style.arrow = false; style.caps = true; }
+  else if(type === 'zonesolid'){ style.width = 2; style.arrow = false; }
+  else if(type === 'zonedash'){ style.width = 2; style.dash = '4,4'; style.arrow = false; }
+  return style;
+}
+
+function drawCourt(task){
+  const svg = document.querySelector(`.court-svg[data-id="${task.id}"]`);
+  if(!svg) return;
+  svg.innerHTML = courtMarkup(task);
+  task.elements.forEach((el,idx)=>{
+    if(el.type === 'player'){
+      const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      c.setAttribute('cx', el.x); c.setAttribute('cy', el.y); c.setAttribute('r', 7);
+      c.setAttribute('fill', el.color);
+      c.setAttribute('stroke', '#152025'); c.setAttribute('stroke-width', 1.2);
+      c.setAttribute('data-idx', idx); c.setAttribute('data-kind','player');
+      c.style.cursor='grab';
+      svg.appendChild(c);
+    } else {
+      const s = lineStyle(el.type, el.x1, el.y1, el.x2, el.y2, el.color);
+      const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+      g.setAttribute('data-idx', idx); g.setAttribute('data-kind','line');
+      const hit = document.createElementNS('http://www.w3.org/2000/svg','path');
+      hit.setAttribute('d', s.pathD); hit.setAttribute('stroke','transparent'); hit.setAttribute('stroke-width','14'); hit.setAttribute('fill','none');
+      const vis = document.createElementNS('http://www.w3.org/2000/svg','path');
+      vis.setAttribute('d', s.pathD); vis.setAttribute('stroke', s.color); vis.setAttribute('stroke-width', s.width);
+      vis.setAttribute('fill','none'); if(s.dash) vis.setAttribute('stroke-dasharray', s.dash);
+      g.appendChild(hit); g.appendChild(vis);
+      if(s.caps){
+        // small perpendicular end caps so the goal reads as a goal mouth, not just a bar
+        const dx = el.x2-el.x1, dy = el.y2-el.y1;
+        const len = Math.hypot(dx,dy) || 1;
+        const nx = -dy/len*5, ny = dx/len*5;
+        g.insertAdjacentHTML('beforeend', `<line x1="${el.x1-nx}" y1="${el.y1-ny}" x2="${el.x1+nx}" y2="${el.y1+ny}" stroke="${s.color}" stroke-width="3"/>`);
+        g.insertAdjacentHTML('beforeend', `<line x1="${el.x2-nx}" y1="${el.y2-ny}" x2="${el.x2+nx}" y2="${el.y2+ny}" stroke="${s.color}" stroke-width="3"/>`);
+      }
+      if(s.arrow) g.insertAdjacentHTML('beforeend', arrowHead(el.x1,el.y1,el.x2,el.y2, s.color));
+      svg.appendChild(g);
+    }
+  });
+}
+
+function setupCourtInteraction(svg, task){
+  let dragMode = null; // 'player-move' | 'line-draw' | 'select-drag'
+  let dragIdx = null;
+  let startPt = null;
+  let tempEl = null;
+
+  function svgPoint(evt){
+    const rect = svg.getBoundingClientRect();
+    const x = (evt.clientX - rect.left) / rect.width * 300;
+    const y = (evt.clientY - rect.top) / rect.height * 200;
+    return {x: Math.max(6,Math.min(294,x)), y: Math.max(6,Math.min(194,y))};
+  }
+  function hitElement(evt){
+    const t = evt.target;
+    const g = t.closest('[data-kind]');
+    if(!g) return null;
+    return { idx: parseInt(g.getAttribute('data-idx')), kind: g.getAttribute('data-kind') };
+  }
+
+  svg.addEventListener('pointerdown', (e)=>{
+    const p = svgPoint(e);
+    const hit = hitElement(e);
+
+    if(activeTool === 'select'){
+      if(hit){
+        pushHistory(task);
+        dragMode = 'select-drag'; dragIdx = hit.idx; startPt = p;
+        svg.setPointerCapture(e.pointerId);
+      }
+      return;
+    }
+    if(activeTool === 'player'){
+      if(hit && hit.kind === 'player'){
+        pushHistory(task);
+        dragMode = 'player-move'; dragIdx = hit.idx;
+        svg.setPointerCapture(e.pointerId);
+      } else if(!hit){
+        pushHistory(task);
+        task.elements.push({type:'player', x:p.x, y:p.y, color:activeColor});
+        drawCourt(task);
+      }
+      return;
+    }
+    // line tools: pass / move / dribble / goal / zone lines
+    if(LINE_TOOLS.includes(activeTool)){
+      dragMode = 'line-draw'; startPt = p;
+      svg.setPointerCapture(e.pointerId);
+    }
+  });
+
+  svg.addEventListener('pointermove', (e)=>{
+    if(!dragMode) return;
+    const p = svgPoint(e);
+    if(dragMode === 'player-move' || (dragMode==='select-drag' && task.elements[dragIdx] && task.elements[dragIdx].type==='player')){
+      task.elements[dragIdx].x = p.x; task.elements[dragIdx].y = p.y;
+      drawCourt(task);
+    } else if(dragMode === 'select-drag'){
+      const el2 = task.elements[dragIdx];
+      const dx = p.x - startPt.x, dy = p.y - startPt.y;
+      el2.x1 += dx; el2.y1 += dy; el2.x2 += dx; el2.y2 += dy;
+      startPt = p;
+      drawCourt(task);
+    } else if(dragMode === 'line-draw'){
+      // live preview
+      let existing = svg.querySelector('#tempLine');
+      if(existing) existing.remove();
+      const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+      g.setAttribute('id','tempLine');
+      const s = lineStyle(activeTool, startPt.x, startPt.y, p.x, p.y, activeColor);
+      const vis = document.createElementNS('http://www.w3.org/2000/svg','path');
+      vis.setAttribute('d', s.pathD); vis.setAttribute('stroke', s.color); vis.setAttribute('stroke-width', s.width);
+      vis.setAttribute('fill','none'); vis.setAttribute('opacity','0.75'); if(s.dash) vis.setAttribute('stroke-dasharray', s.dash);
+      g.appendChild(vis);
+      svg.appendChild(g);
+    }
+  });
+
+  svg.addEventListener('pointerup', (e)=>{
+    if(dragMode === 'line-draw'){
+      const p = svgPoint(e);
+      const existing = svg.querySelector('#tempLine');
+      if(existing) existing.remove();
+      const dist = Math.hypot(p.x-startPt.x, p.y-startPt.y);
+      if(dist > 8){
+        pushHistory(task);
+        task.elements.push({type: activeTool, x1:startPt.x, y1:startPt.y, x2:p.x, y2:p.y, color:activeColor});
+        drawCourt(task);
+      }
+    }
+    dragMode = null; dragIdx = null; startPt = null;
+  });
+
+  function deleteAt(evt){
+    const hit = hitElement(evt);
+    if(hit){
+      pushHistory(task);
+      task.elements.splice(hit.idx,1);
+      drawCourt(task);
+    }
+  }
+  svg.addEventListener('contextmenu', (e)=>{ e.preventDefault(); deleteAt(e); });
+  svg.addEventListener('dblclick', (e)=>{ deleteAt(e); });
+}
+
+// ---------- Add task / paste parser ----------
+document.getElementById('addTaskBtn').addEventListener('click', ()=> createTask());
+document.getElementById('addTaskBtn2').addEventListener('click', ()=> createTask());
+
+const pasteModal = document.getElementById('pasteModal');
+document.getElementById('pasteBtn').addEventListener('click', ()=> pasteModal.style.display='flex');
+document.getElementById('pasteCancel').addEventListener('click', ()=> pasteModal.style.display='none');
+document.getElementById('pasteConfirm').addEventListener('click', ()=>{
+  const raw = document.getElementById('pasteArea').value;
+  parseAndAddTasks(raw);
+  document.getElementById('pasteArea').value='';
+  pasteModal.style.display='none';
+});
+
+function parseAndAddTasks(raw){
+  if(!raw.trim()) return;
+  const blocks = raw.split(/\n(?=TAREA\s*:)/i).map(b=>b.trim()).filter(Boolean);
+  blocks.forEach(block=>{
+    const titleMatch = block.match(/TAREA\s*:\s*(.*)/i);
+    const durMatch = block.match(/DURACI[OÓ]N\s*:\s*([^\n]*)/i);
+    const descMatch = block.match(/DESCRIPCI[OÓ]N\s*:\s*([\s\S]*)/i);
+    createTask({
+      title: titleMatch ? titleMatch[1].trim() : '',
+      duration: durMatch ? durMatch[1].trim().replace(/[^\d]/g,'') : '',
+      desc: descMatch ? descMatch[1].trim() : ''
+    });
+  });
+}
+
+// ---------- Export to PDF ----------
+document.getElementById('exportBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('exportBtn');
+  const originalText = btn.textContent;
+  btn.textContent = 'Generando...'; btn.disabled = true;
+  document.body.classList.add('exporting');
+  await new Promise(r=>setTimeout(r, 60));
+  try{
+    const sheet = document.getElementById('sheet');
+    const canvas = await html2canvas(sheet, {scale:2, backgroundColor:'#F3EFE6', useCORS:true});
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF('p','mm','a4');
+    const pageW = 210, pageH = 297;
+    const imgW = pageW;
+    const imgH = canvas.height * imgW / canvas.width;
+    let heightLeft = imgH; let position = 0;
+    const imgData = canvas.toDataURL('image/jpeg', 0.92);
+    pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH);
+    heightLeft -= pageH;
+    while(heightLeft > 0){
+      position = heightLeft - imgH;
+      pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH);
+      heightLeft -= pageH;
+    }
+    const sesionName = document.getElementById('f-sesion').value || 'sesion';
+    pdf.save(`${sesionName.replace(/\s+/g,'_')}.pdf`);
+  }catch(err){
+    console.error(err);
+    alert('No se pudo generar el PDF: ' + err.message);
+  }finally{
+    document.body.classList.remove('exporting');
+    btn.textContent = originalText; btn.disabled = false;
+  }
+});
+
+// ---------- Seed example tasks ----------
+createTask({title:'Mini partido', duration:'10', desc:'Mini partido con porterías a 2 toques y 3 en recuperación.\nColocamiento de portero.'});
+createTask({title:'Posesión', duration:'10', desc:'Posesión y 2vs1 tras pérdida. El que pierde el balón defiende, el que roba y 1 atacan.'});
+createTask({title:'2 vs 1', duration:'10', desc:'2 vs 1 desde saque de portero. El que recibe defiende.'});
+createTask({title:'', duration:'', desc:''});
+createTask({title:'Partidos', duration:'50', desc:'Partidos a 5 min.'});
+</script>
+</body>
+</html>
