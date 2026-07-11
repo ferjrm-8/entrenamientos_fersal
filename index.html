@@ -646,20 +646,12 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
     const sheet = document.getElementById('sheet');
     const canvas = await html2canvas(sheet, {scale:2, backgroundColor:'#F3EFE6', useCORS:true, width: sheet.offsetWidth, windowWidth: sheet.offsetWidth});
     const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF('p','mm','a4');
-    const pageW = 210, pageH = 297;
-    const imgW = pageW;
+    const imgW = 210; // fixed page width in mm, matches the sheet's own proportions
     const imgH = canvas.height * imgW / canvas.width;
-    let heightLeft = imgH; let position = 0;
+    // One single page exactly as tall as the content — no page breaks, no cut lines.
+    const pdf = new jsPDF({ orientation:'p', unit:'mm', format:[imgW, imgH] });
     const imgData = canvas.toDataURL('image/jpeg', 0.92);
-    pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH);
-    heightLeft -= pageH;
-    while(heightLeft > 0){
-      position = heightLeft - imgH;
-      pdf.addPage();
-      pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH);
-      heightLeft -= pageH;
-    }
+    pdf.addImage(imgData, 'JPEG', 0, 0, imgW, imgH);
     const sesionName = document.getElementById('f-sesion').value || 'sesion';
     pdf.save(`${sesionName.replace(/\s+/g,'_')}.pdf`);
   }catch(err){
