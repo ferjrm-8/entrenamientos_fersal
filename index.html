@@ -49,7 +49,7 @@
   .hint-bar{ background:#EFE4C8; color:#5c4a1f; font-size:12px; padding:6px 16px; text-align:center; }
 
   .stage{ padding:26px 14px 60px; display:flex; justify-content:center; }
-  .sheet{ width:794px; background:var(--paper); box-shadow:0 6px 24px rgba(0,0,0,.25); border:2px solid var(--ink); }
+  .sheet{ width:794px; background:var(--paper); box-shadow:0 6px 24px rgba(0,0,0,.25); border:2px solid var(--ink); overflow:hidden; }
 
   .head{ display:flex; border-bottom:2px solid var(--ink); }
   .head-fields{ flex:1; min-width:0; }
@@ -645,7 +645,7 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
     swapped = swapFieldsForExport();
     await new Promise(r=>setTimeout(r, 30));
     const sheet = document.getElementById('sheet');
-    const canvas = await html2canvas(sheet, {scale:2, backgroundColor:'#F3EFE6', useCORS:true});
+    const canvas = await html2canvas(sheet, {scale:2, backgroundColor:'#F3EFE6', useCORS:true, width: sheet.offsetWidth, windowWidth: sheet.offsetWidth});
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF('p','mm','a4');
     const pageW = 210, pageH = 297;
