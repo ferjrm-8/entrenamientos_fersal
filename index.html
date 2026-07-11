@@ -60,7 +60,7 @@
   .field-row input:focus, .field-row textarea:focus{ background:#fff; border-radius:2px; }
   .obj-row{ display:flex; gap:6px; padding:6px 0 2px; }
   .obj-row .lab{ font-weight:700; font-size:13.5px; }
-  .obj-row textarea{ resize:none; height:34px; width:100%; }
+  .obj-row textarea{ resize:none; width:100%; overflow:hidden; }
 
   .logo-box{ border-left:2px solid var(--ink); display:flex; align-items:center; justify-content:center; position:relative; background:#fff; cursor:pointer; }
   .logo-box img{ max-width:88%; max-height:88%; object-fit:contain; }
@@ -75,9 +75,9 @@
   .task-title-bar{ background:var(--band-2); color:#fff; padding:6px 10px; display:flex; align-items:center; justify-content:space-between; font-size:13px; font-weight:700; }
   .task-title-bar input{ background:transparent; border:none; color:#fff; font-weight:700; font-family:'Oswald',sans-serif; font-size:13px; letter-spacing:.04em; outline:none; flex:1; text-transform:uppercase; }
   .task-title-bar .dur{ display:flex; align-items:center; gap:4px; white-space:nowrap;}
-  .task-title-bar .dur input{ width:34px; text-align:center; font-weight:700; text-transform:none;}
+  .task-title-bar .dur input{ width:3ch; min-width:3ch; text-align:center; font-weight:700; text-transform:none;}
   .task-desc-label{ font-size:11px; font-weight:700; text-align:center; padding:5px 0 2px; color:#555; }
-  .task-desc{ flex:1; border:none; background:transparent; resize:none; font-family:'Barlow',sans-serif; font-size:14px; padding:4px 12px 12px; outline:none; min-height:120px; color:var(--ink); }
+  .task-desc{ border:none; background:transparent; resize:none; font-family:'Barlow',sans-serif; font-size:14px; padding:4px 12px 12px; outline:none; min-height:120px; color:var(--ink); overflow:hidden; }
   .task-desc:focus{ background:#fbf9f3; }
   .task-actions{ display:flex; justify-content:flex-end; gap:6px; padding:4px 8px; }
   .mini-btn{ border:1px solid #bbb; background:#fff; border-radius:3px; font-size:11px; padding:3px 7px; cursor:pointer; color:#555; }
@@ -197,6 +197,19 @@ let activeTool = 'player';
 let taskCounter = 0;
 let tasks = [];
 
+// Grows a textarea's height to fit its full content — prevents html2canvas
+// (and the human eye) from losing text hidden behind an internal scrollbar.
+function autosizeTextarea(el){
+  if(!el) return;
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+// Grows a small inline input (like the duration field) to fit its value.
+function autosizeInput(el){
+  if(!el) return;
+  el.style.width = Math.max(3, el.value.length + 1) + 'ch';
+}
+
 const HINTS = {
   player: 'Modo Jugador: click para colocar · click derecho / doble click sobre un elemento para borrarlo',
   pass: 'Modo Pase: arrastra de un punto a otro para dibujar una flecha discontinua',
@@ -231,6 +244,13 @@ const logoInput = document.getElementById('logoInput');
 const logoImg = document.getElementById('logoImg');
 const logoPlaceholder = document.getElementById('logoPlaceholder');
 logoBox.addEventListener('click', ()=> logoInput.click());
+const objEl = document.getElementById('f-objetivos');
+const obsEl = document.getElementById('f-observaciones');
+objEl.style.overflow = 'hidden';
+obsEl.style.overflow = 'hidden';
+objEl.addEventListener('input', ()=> autosizeTextarea(objEl));
+obsEl.addEventListener('input', ()=> autosizeTextarea(obsEl));
+autosizeTextarea(objEl); autosizeTextarea(obsEl);
 logoInput.addEventListener('change', async (e)=>{
   const file = e.target.files[0];
   if(!file) return;
@@ -303,8 +323,12 @@ function renderTask(task){
   tasksContainer.appendChild(el);
 
   el.querySelector('.title-input').addEventListener('input', e=> task.title = e.target.value);
-  el.querySelector('.dur-input').addEventListener('input', e=> task.duration = e.target.value);
-  el.querySelector('.task-desc').addEventListener('input', e=> task.desc = e.target.value);
+  const durEl = el.querySelector('.dur-input');
+  durEl.addEventListener('input', e=>{ task.duration = e.target.value; autosizeInput(durEl); });
+  autosizeInput(durEl);
+  const descEl = el.querySelector('.task-desc');
+  descEl.addEventListener('input', e=>{ task.desc = e.target.value; autosizeTextarea(descEl); });
+  autosizeTextarea(descEl);
   el.querySelector('.del-btn').addEventListener('click', ()=>{
     tasks = tasks.filter(t=>t.id!==task.id);
     el.remove();
@@ -566,6 +590,14 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
   const btn = document.getElementById('exportBtn');
   const originalText = btn.textContent;
   btn.textContent = 'Generando...'; btn.disabled = true;
+
+  // Make sure nothing is hidden behind internal scroll/cursor state before capture
+  if(document.activeElement) document.activeElement.blur();
+  autosizeTextarea(objEl); autosizeTextarea(obsEl);
+  document.querySelectorAll('#sheet textarea').forEach(t=>{ t.scrollTop = 0; autosizeTextarea(t); });
+  document.querySelectorAll('#sheet input').forEach(i=>{ i.scrollLeft = 0; });
+  document.querySelectorAll('.dur-input').forEach(d=> autosizeInput(d));
+
   document.body.classList.add('exporting');
   await new Promise(r=>setTimeout(r, 60));
   try{
